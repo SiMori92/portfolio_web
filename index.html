@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simpo Chiu — Investment Portfolio</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy:   #0a1628; --navy2: #0f2040; --gold: #c9a84c; --gold2: #e8c96a;
+      --white:  #f0f4ff; --muted: #8899bb; --green: #2ecc71; --red: #e74c3c;
+      --card:   #0d1d38; --border: rgba(201,168,76,0.2);
+      --blue:   #3b82f6; --purple: #8b5cf6;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Georgia', serif; background: var(--navy); color: var(--white); line-height: 1.7; overflow-x: hidden; }
+    a { color: var(--gold); text-decoration: none; } a:hover { color: var(--gold2); }
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: var(--navy2); }
+    ::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 3px; }
+
+    /* NAV BAR */
+    nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 18px 48px; background: rgba(10,22,40,0.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    .nav-logo { font-size: 1.15rem; font-weight: bold; letter-spacing: 0.08em; color: var(--gold); }
+    .nav-logo span { color: var(--white); }
+    .nav-links { display: flex; gap: 36px; }
+    .nav-links a { font-family: sans-serif; font-size: 0.82rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); transition: color 0.2s; }
+    .nav-links a:hover, .nav-links a.active { color: var(--gold); }
+
+    /* LOADING */
+    #loading-overlay { position: fixed; inset: 0; z-index: 999; background: var(--navy); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; transition: opacity 0.5s ease; }
+    #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+    .loading-logo { font-size: 1.4rem; color: var(--gold); font-family: Georgia, serif; }
+    .loading-bar-track { width: 200px; height: 2px; background: rgba(201,168,76,0.15); border-radius: 2px; overflow: hidden; }
+    .loading-bar-fill { height: 100%; width: 0%; background: var(--gold); border-radius: 2px; animation: loadbar 2s ease forwards; }
+    @keyframes loadbar { to { width: 90%; } }
+    .loading-text { font-family: sans-serif; font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+
+    /* HERO */
+    #hero { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 120px 32px 80px; position: relative; overflow: hidden; }
+    .hero-bg { position: absolute; inset: 0; z-index: 0; background: radial-gradient(ellipse 80% 60% at 50% 40%, rgba(201,168,76,0.07) 0%, transparent 70%), linear-gradient(180deg, var(--navy) 0%, var(--navy2) 100%); }
+    .hero-bg::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(rgba(201,168,76,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(201,168,76,0.04) 1px, transparent 1px); background-size: 60px 60px; }
+    .hero-content { position: relative; z-index: 1; max-width: 760px; }
+    .hero-eyebrow { display: inline-block; font-family: sans-serif; font-size: 0.78rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); border: 1px solid var(--border); padding: 6px 18px; border-radius: 20px; margin-bottom: 28px; }
+    h1.hero-title { font-size: clamp(2.6rem, 6vw, 4.2rem); line-height: 1.15; margin-bottom: 12px; }
+    h1.hero-title .gold { color: var(--gold); }
+    .hero-subtitle { font-size: clamp(1rem, 2.5vw, 1.3rem); color: var(--muted); margin-bottom: 40px; font-style: italic; }
+    .hero-cta { display: inline-flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+    .btn { padding: 13px 30px; border-radius: 4px; font-family: sans-serif; font-size: 0.82rem; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; transition: all 0.25s; display: inline-block; }
+    .btn-primary { background: var(--gold); color: var(--navy); border: 1px solid var(--gold); font-weight: 700; }
+    .btn-primary:hover { background: var(--gold2); color: var(--navy); }
+    .btn-outline { background: transparent; color: var(--gold); border: 1px solid var(--border); }
+    .btn-outline:hover { border-color: var(--gold); background: rgba(201,168,76,0.08); }
+    .hero-stats { display: flex; gap: 56px; justify-content: center; flex-wrap: wrap; margin-top: 64px; padding-top: 40px; border-top: 1px solid var(--border); }
+    .hero-stat { text-align: center; }
+    .hero-stat-value { display: block; font-size: 1.9rem; font-weight: bold; color: var(--gold); }
+    .hero-stat-label { font-family: sans-serif; font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+
+    /* SECTIONS */
+    section { padding: 96px 32px; }
+    .section-inner { max-width: 1060px; margin: 0 auto; }
+    .section-eyebrow { font-family: sans-serif; font-size: 0.75rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); margin-bottom: 14px; display: block; }
+    .section-title { font-size: clamp(1.8rem, 4vw, 2.8rem); margin-bottom: 16px; line-height: 1.2; }
+    .section-lead { font-size: 1.05rem; color: var(--muted); max-width: 620px; margin-bottom: 56px; }
+    .divider { width: 48px; height: 2px; background: linear-gradient(90deg, var(--gold), transparent); margin: 16px 0 40px; }
+
+    /* STATUS */
+    .data-status { display: inline-flex; align-items: center; gap: 8px; font-family: sans-serif; font-size: 0.72rem; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 40px; }
+    .data-status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: pulse 2s infinite; }
+    .data-status-dot.live { background: var(--green); }
+    .data-status-dot.error { background: var(--red); animation: none; }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+    .data-error-banner { background: rgba(231,76,60,0.1); border: 1px solid rgba(231,76,60,0.3); border-radius: 6px; padding: 14px 20px; margin-bottom: 32px; font-family: sans-serif; font-size: 0.82rem; color: #e74c3c; display: none; }
+
+    /* PHILOSOPHY */
+    #philosophy { background: var(--navy2); }
+    .philosophy-tagline { font-size: clamp(1.6rem, 4vw, 2.4rem); color: var(--gold); font-style: italic; margin-bottom: 16px; }
+    .philosophy-desc { font-size: 1.05rem; color: var(--muted); max-width: 680px; margin-bottom: 64px; line-height: 1.8; }
+    .pillars { display: grid; grid-template-columns: repeat(3,1fr); gap: 28px; }
+    .pillar { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 36px 28px; position: relative; overflow: hidden; transition: border-color 0.3s, transform 0.3s; }
+    .pillar:hover { border-color: var(--gold); transform: translateY(-4px); }
+    .pillar::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--gold), transparent); }
+    .pillar-number { font-family: sans-serif; font-size: 3rem; font-weight: 800; color: rgba(201,168,76,0.12); position: absolute; top: 16px; right: 20px; line-height: 1; }
+    .pillar-icon { width: 48px; height: 48px; border-radius: 8px; background: rgba(201,168,76,0.1); display: flex; align-items: center; justify-content: center; margin-bottom: 20px; font-size: 1.4rem; }
+    .pillar-title { font-size: 1.15rem; color: var(--gold); margin-bottom: 12px; font-weight: bold; }
+    .pillar-text { font-size: 0.92rem; color: var(--muted); line-height: 1.75; }
+    .pillar-text strong { color: var(--white); }
+
+    /* PERFORMANCE */
+    #performance { background: var(--navy); }
+    .stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; margin-bottom: 48px; }
+    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 24px 20px; transition: border-color 0.3s; }
+    .stat-card:hover { border-color: var(--gold); }
+    .stat-card-label { font-family: sans-serif; font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+    .stat-card-value { font-size: 1.7rem; font-weight: bold; color: var(--gold); line-height: 1.1; }
+    .stat-card-value.pos { color: var(--green); }
+    .stat-card-value.neg { color: var(--red); }
+    .stat-card-sub { font-family: sans-serif; font-size: 0.72rem; color: var(--muted); margin-top: 6px; }
+
+    /* CHART CARDS */
+    .chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 28px 24px; }
+    .chart-card-full { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 28px 24px; margin-bottom: 28px; }
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 28px; }
+    .chart-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+    .chart-title { font-family: sans-serif; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+
+    /* TOGGLE BUTTONS */
+    .toggle-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .toggle-btn {
+      padding: 5px 12px; border-radius: 4px; font-family: sans-serif; font-size: 0.72rem;
+      letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;
+      border: 1px solid var(--border); background: transparent; color: var(--muted);
+      transition: all 0.2s;
+    }
+    .toggle-btn:hover { border-color: var(--gold); color: var(--gold); }
+    .toggle-btn.active { background: rgba(201,168,76,0.15); border-color: var(--gold); color: var(--gold); }
+    .toggle-btn.sp500.active  { background: rgba(59,130,246,0.15); border-color: var(--blue);   color: var(--blue); }
+    .toggle-btn.nasdaq.active { background: rgba(139,92,246,0.15); border-color: var(--purple); color: var(--purple); }
+    .toggle-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .chart-note { font-family: sans-serif; font-size: 0.68rem; color: var(--muted); margin-top: 10px; font-style: italic; }
+
+    /* ANNUAL TABLE */
+    .yearly-table { width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 0.88rem; }
+    .yearly-table th { text-align: left; padding: 10px 16px; font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
+    .yearly-table td { padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--white); }
+    .yearly-table tr:last-child td { border-bottom: none; }
+    .pos { color: var(--green); } .neg { color: var(--red); }
+    .bar-cell { display: flex; align-items: center; gap: 8px; }
+    .bar-bg { flex: 1; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 3px; }
+    .bar-p { background: var(--green); } .bar-n { background: var(--red); }
+
+    /* CONTACT */
+    #contact { background: var(--navy2); }
+    .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: start; }
+    .contact-form { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 40px 36px; }
+    .form-title { font-size: 1.3rem; color: var(--gold); margin-bottom: 28px; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; font-family: sans-serif; font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+    .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 12px 16px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; color: var(--white); font-family: sans-serif; font-size: 0.9rem; outline: none; transition: border-color 0.2s; }
+    .form-group input:focus, .form-group textarea:focus { border-color: var(--gold); }
+    .form-group input::placeholder, .form-group textarea::placeholder { color: var(--muted); }
+    .form-group textarea { resize: vertical; min-height: 110px; }
+    .form-group select option { background: var(--navy2); }
+    .contact-intro { font-size: 1rem; color: var(--muted); margin-bottom: 36px; line-height: 1.8; }
+    .contact-item { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
+    .contact-item:last-child { border-bottom: none; }
+    .contact-icon { width: 44px; height: 44px; border-radius: 8px; flex-shrink: 0; background: rgba(201,168,76,0.1); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+    .contact-item-label { font-family: sans-serif; font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+    .contact-item-value { font-size: 0.95rem; color: var(--white); }
+    .form-note { font-family: sans-serif; font-size: 0.78rem; color: var(--muted); margin-top: 14px; font-style: italic; }
+
+    /* FOOTER */
+    footer { background: #06101f; border-top: 1px solid var(--border); padding: 32px 48px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+    .footer-copy { font-family: sans-serif; font-size: 0.78rem; color: var(--muted); }
+    .footer-disc { font-family: sans-serif; font-size: 0.72rem; color: rgba(136,153,187,0.6); max-width: 480px; text-align: right; line-height: 1.5; }
+
+    /* ANIMATIONS */
+    .fade-in { opacity: 0; transform: translateY(24px); transition: opacity 0.7s ease, transform 0.7s ease; }
+    .fade-in.visible { opacity: 1; transform: none; }
+
+    /* RESPONSIVE */
+    @media (max-width: 900px) {
+      nav { padding: 16px 20px; } .nav-links { gap: 20px; }
+      .pillars { grid-template-columns: 1fr; }
+      .stats-row { grid-template-columns: 1fr 1fr; }
+      .charts-grid { grid-template-columns: 1fr; }
+      .contact-grid { grid-template-columns: 1fr; }
+      .footer-disc { text-align: left; }
+    }
+    @media (max-width: 600px) {
+      nav { padding: 14px 16px; } .nav-links { display: none; }
+      section { padding: 64px 20px; }
+      .stats-row { grid-template-columns: 1fr 1fr; }
+      footer { padding: 24px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading-overlay">
+  <div class="loading-logo">Simpo <span style="color:#f0f4ff">Chiu</span></div>
+  <div class="loading-bar-track"><div class="loading-bar-fill"></div></div>
+  <div class="loading-text" id="loading-text">Fetching live data…</div>
+</div>
+
+<!-- Nav -->
+<nav id="navbar">
+  <div class="nav-logo">Simpo <span>Chiu</span></div>
+  <div class="nav-links">
+    <a href="#hero">Home</a>
+    <a href="#philosophy">Philosophy</a>
+    <a href="#performance">Performance</a>
+    <a href="#contact">Contact</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-content fade-in visible">
+    <div class="hero-eyebrow">Investment Portfolio</div>
+    <h1 class="hero-title">Monetise <span class="gold">Time</span></h1>
+    <p class="hero-subtitle">A disciplined approach to wealth creation through patient, probability-driven investing</p>
+    <div class="hero-cta">
+      <a href="#performance" class="btn btn-primary">View Performance</a>
+      <a href="#philosophy" class="btn btn-outline">My Philosophy</a>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <span class="hero-stat-value" id="h-peak">—</span>
+        <span class="hero-stat-label">Peak NAV</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-value" id="h-years">—</span>
+        <span class="hero-stat-label">Track Record</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-value">USD</span>
+        <span class="hero-stat-label">Base Currency</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Philosophy -->
+<section id="philosophy">
+  <div class="section-inner">
+    <span class="section-eyebrow">Investment Philosophy</span>
+    <p class="philosophy-tagline">"Monetise Time"</p>
+    <div class="divider"></div>
+    <p class="philosophy-desc">Time is the most scarce and irreversible resource in investing. My philosophy is built on the conviction that patient, systematic allocation — anchored in probability and structural trend — unlocks compounding returns that short-term trading cannot replicate.</p>
+    <div class="pillars">
+      <div class="pillar fade-in">
+        <div class="pillar-number">01</div>
+        <div class="pillar-icon">📈</div>
+        <div class="pillar-title">Assume Uptrend in Mid to Long Term</div>
+        <p class="pillar-text">Capital markets have historically rewarded patient holders. Rather than second-guessing short-term noise, I orient positions around the <strong>structural upward bias</strong> of equities and risk assets over multi-year horizons.</p>
+      </div>
+      <div class="pillar fade-in">
+        <div class="pillar-number">02</div>
+        <div class="pillar-icon">🎯</div>
+        <div class="pillar-title">Risk Control by Probability</div>
+        <p class="pillar-text">Every position is sized and managed through a <strong>probabilistic lens</strong>. Expected value, asymmetry of outcomes, and scenario-weighted downside guide both entry and exit decisions. Preservation of capital is the prerequisite to compounding.</p>
+      </div>
+      <div class="pillar fade-in">
+        <div class="pillar-number">03</div>
+        <div class="pillar-icon">🔬</div>
+        <div class="pillar-title">Fundamental &amp; Technical</div>
+        <p class="pillar-text"><strong>Fundamentals define the destination</strong> — earnings power, valuation, and competitive moat. <strong>Technicals define the timing</strong> — price action, momentum, and market structure. Both lenses together reduce error.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Performance -->
+<section id="performance">
+  <div class="section-inner">
+    <span class="section-eyebrow">Investment Performance</span>
+    <h2 class="section-title">Track Record</h2>
+    <div class="divider"></div>
+    <div class="data-status">
+      <div class="data-status-dot" id="status-dot"></div>
+      <span id="status-text">Loading from Google Sheets…</span>
+    </div>
+    <div class="data-error-banner" id="error-banner"></div>
+    <p class="section-lead" id="perf-lead">Live portfolio performance — Base currency: USD (Column E).</p>
+
+    <!-- 3-col stats -->
+    <div class="stats-row fade-in">
+      <div class="stat-card">
+        <div class="stat-card-label">Peak NAV</div>
+        <div class="stat-card-value" id="s-peaknav">—</div>
+        <div class="stat-card-sub" id="s-peaknav-date">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">Peak Portfolio Return</div>
+        <div class="stat-card-value pos" id="s-peakret">—</div>
+        <div class="stat-card-sub">From inception NAV</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">Track Record</div>
+        <div class="stat-card-value" id="s-years">—</div>
+        <div class="stat-card-sub" id="s-daterange">—</div>
+      </div>
+    </div>
+
+    <!-- NAV Chart with toggles -->
+    <div class="chart-card-full fade-in">
+      <div class="chart-header">
+        <div class="chart-title" id="nav-chart-title">Portfolio NAV — USD</div>
+        <div class="toggle-group">
+          <button class="toggle-btn sp500"  id="btn-sp500"  onclick="toggleIndex('sp500')">+ S&amp;P 500</button>
+          <button class="toggle-btn nasdaq" id="btn-nasdaq" onclick="toggleIndex('nasdaq')">+ Nasdaq</button>
+        </div>
+      </div>
+      <canvas id="navChart" height="90"></canvas>
+      <p class="chart-note" id="nav-chart-note"></p>
+    </div>
+
+    <!-- 2-col: Accumulated Return + Asset Allocation -->
+    <div class="charts-grid">
+      <div class="chart-card fade-in">
+        <div class="chart-title">Portfolio Return from Inception (%)</div>
+        <canvas id="retChart" height="180"></canvas>
+      </div>
+      <div class="chart-card fade-in">
+        <div class="chart-header">
+          <div class="chart-title">Asset Allocation — Monthly</div>
+          <div class="toggle-group">
+            <button class="toggle-btn active" id="btn-alloc-area"  onclick="setAllocMode('area')">Stacked</button>
+            <button class="toggle-btn"        id="btn-alloc-line"  onclick="setAllocMode('line')">Lines</button>
+          </div>
+        </div>
+        <canvas id="allocChart" height="180"></canvas>
+      </div>
+    </div>
+
+    <!-- Annual Snapshot table -->
+    <div class="chart-card fade-in">
+      <div class="chart-title">Annual Snapshot (Year-over-Year)</div>
+      <table class="yearly-table">
+        <thead>
+          <tr>
+            <th>Year</th>
+            <th>Year-End NAV (USD)</th>
+            <th>Annual Return</th>
+            <th>Visual</th>
+          </tr>
+        </thead>
+        <tbody id="yearly-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Contact -->
+<section id="contact">
+  <div class="section-inner">
+    <span class="section-eyebrow">Get in Touch</span>
+    <h2 class="section-title">Contact</h2>
+    <div class="divider"></div>
+    <div class="contact-grid">
+      <div class="fade-in">
+        <p class="contact-intro">Interested in discussing investment ideas, collaborative opportunities, or my portfolio approach? I welcome thoughtful conversations with fellow investors and researchers.</p>
+        <div class="contact-item">
+          <div class="contact-icon">🌏</div>
+          <div>
+            <div class="contact-item-label">Location</div>
+            <div class="contact-item-value">Hong Kong</div>
+          </div>
+        </div>
+        <div class="contact-item">
+          <div class="contact-icon">🕒</div>
+          <div>
+            <div class="contact-item-label">Response Time</div>
+            <div class="contact-item-value">Typically within 2–3 business days</div>
+          </div>
+        </div>
+      </div>
+      <div class="contact-form fade-in">
+        <div class="form-title">Send a Message</div>
+        <form action="https://formsubmit.co/schiu.develop@gmail.com" method="POST">
+          <input type="hidden" name="_captcha" value="false">
+          <input type="hidden" name="_subject" value="Portfolio Website Inquiry">
+          <div class="form-group"><label>Your Name</label><input type="text" name="name" placeholder="e.g. John Smith" required /></div>
+          <div class="form-group"><label>Email Address</label><input type="email" name="email" placeholder="your@email.com" required /></div>
+          <div class="form-group">
+            <label>Subject</label>
+            <select name="subject">
+              <option>Investment Discussion</option><option>Collaboration Opportunity</option>
+              <option>General Inquiry</option><option>Other</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Message</label><textarea name="message" placeholder="Share your thoughts or questions…" required></textarea></div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Send Message</button>
+          <p class="form-note">* Messages are delivered directly to my inbox.</p>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-copy">© 2024 Simpo Chiu · All rights reserved</div>
+  <div class="footer-disc">For informational purposes only. Past performance does not guarantee future results.</div>
+</footer>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   CONFIGURATION
+════════════════════════════════════════════════════════════ */
+const SHEET_ID = '1zvLYeGEZL7xc7btWXBKcv9G5Jo_Z7Hz5KSjbr68WUyU';
+const PUB_ID   = '2PACX-1vQqcavHCFL-W8wU9VQXDJfoC-SYmCtnF31-USiCxRtfCsPtXlNyR28Qkh1AKqxTUF6iDDnZbg1T51T5';
+const SHEET_TAB = '';
+
+/* Column indices (0-based, matching sheet structure A=0…R=17) */
+const COL = {
+  NAV      : 4,   // Col E — NAV in USD
+  DATE_OBJ : 13,  // Col N — date value
+  PCT_CASH : 14,  // Col O — % cash
+  PCT_EQ   : 15,  // Col P — % equity in NAV
+  DAILY_RET: 16,  // Col Q — daily return (not displayed, kept for future)
+};
+
+/* ════════════════════════════════════════════════════════════
+   CHART INSTANCES & GLOBALS
+════════════════════════════════════════════════════════════ */
+Chart.defaults.color = '#8899bb';
+Chart.defaults.borderColor = 'rgba(201,168,76,0.08)';
+Chart.defaults.font.family = 'sans-serif';
+
+const GOLD = '#c9a84c', GREEN = '#2ecc71', RED = '#e74c3c';
+const BLUE = '#3b82f6', PURPLE = '#8b5cf6';
+
+let navChartInst, retChartInst, allocChartInst;
+let portfolioMonthly = [];       // monthly snapshots [{dateStr, nav, cash, equity}]
+let indexCache = {};             // { sp500: [{ym, close}], nasdaq: [...] }
+let showSP500 = false, showNasdaq = false;
+let allocMode = 'area';          // 'area' | 'line'
+
+/* ════════════════════════════════════════════════════════════
+   FETCH — Published CSV (primary) → gviz (fallback)
+════════════════════════════════════════════════════════════ */
+async function fetchSheetData() {
+  // ── Method 1: Published CSV ──
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?output=csv`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('CSV ' + resp.status);
+    const data = parseCSV(await resp.text());
+    if (data.length > 0) return data;
+    throw new Error('CSV: 0 rows');
+  } catch (e) { console.warn('CSV failed:', e.message); }
+
+  // ── Method 2: gviz/tq ──
+  const sp = SHEET_TAB ? `&sheet=${encodeURIComponent(SHEET_TAB)}` : '';
+  const resp = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json${sp}`);
+  if (!resp.ok) throw new Error('gviz ' + resp.status);
+  const text = await resp.text();
+  const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/);
+  if (!match) throw new Error('gviz: bad format');
+  const gviz = JSON.parse(match[1]);
+  if (gviz.status === 'error') throw new Error(gviz.errors?.[0]?.detailed_message);
+  return parseGviz(gviz.table?.rows || []);
+}
+
+/* ── CSV parser ── */
+/* Handles both decimal (0.1017) and percentage-string ("10.17%") formats */
+function parsePct(str) {
+  const s = (str == null ? '' : String(str)).trim();
+  if (s.endsWith('%')) return parseFloat(s) / 100;
+  const v = parseFloat(s);
+  if (isNaN(v)) return 0;
+  return Math.abs(v) > 1 ? v / 100 : v;   // >1 means already in percent form
+}
+
+function parseCSV(text) {
+  const lines = text.replace(/\r/g,'').split('\n');
+  const result = [];
+  for (let i = 1; i < lines.length; i++) {
+    const c = splitCSV(lines[i]);
+    if (c.length < 16) continue;
+    const rawDate = c[COL.DATE_OBJ]?.trim();
+    if (!rawDate) continue;
+    const date = new Date(rawDate);
+    if (isNaN(date.getTime())) continue;
+    const nav = parseFloat(c[COL.NAV]);
+    if (isNaN(nav) || nav === 0) continue;
+    result.push({
+      date, dateStr: date.toISOString().slice(0,10),
+      nav,
+      cash  : parsePct(c[COL.PCT_CASH]),
+      equity: parsePct(c[COL.PCT_EQ]),
+    });
+  }
+  return result;
+}
+function splitCSV(line) {
+  const cells=[]; let cur='', inQ=false;
+  for(const ch of line){ if(ch==='"'){inQ=!inQ;}else if(ch===','&&!inQ){cells.push(cur);cur='';}else{cur+=ch;} }
+  cells.push(cur); return cells;
+}
+
+/* ── gviz parser ── */
+function parseGviz(rows) {
+  const result = [];
+  for (const row of rows) {
+    if (!row.c) continue;
+    const c = row.c;
+    const dc = c[COL.DATE_OBJ];
+    if (!dc || dc.v == null) continue;
+    let date;
+    if (typeof dc.v === 'string' && dc.v.startsWith('Date(')) {
+      const p = dc.v.slice(5,-1).split(',').map(Number);
+      date = new Date(p[0], p[1], p[2]);
+    } else { date = new Date(dc.v); }
+    if (isNaN(date.getTime())) continue;
+    const g = i => { const x=c[i]; return (x&&x.v!=null)?Number(x.v):null; };
+    const nav = g(COL.NAV);
+    if (nav == null || nav === 0) continue;
+    result.push({
+      date, dateStr: date.toISOString().slice(0,10),
+      nav,
+      cash  : g(COL.PCT_CASH) ?? 0,
+      equity: g(COL.PCT_EQ)   ?? 0,
+    });
+  }
+  return result;
+}
+
+/* ════════════════════════════════════════════════════════════
+   AGGREGATE  daily → monthly end-of-month
+════════════════════════════════════════════════════════════ */
+function toMonthly(data) {
+  const map = {};
+  for (const d of data) { map[d.dateStr.slice(0,7)] = d; }
+  return Object.values(map);
+}
+
+function toYearly(monthly) {
+  const map = {};
+  for (const d of monthly) { map[d.dateStr.slice(0,4)] = d; }
+  return Object.values(map);
+}
+
+/* ════════════════════════════════════════════════════════════
+   STATS
+════════════════════════════════════════════════════════════ */
+function computeStats(daily, monthly) {
+  const navFirst  = monthly[0].nav;
+  const peakEntry = daily.reduce((a,b) => b.nav > a.nav ? b : a);
+  const peakRet   = (peakEntry.nav / navFirst - 1) * 100;
+  const start     = daily[0];
+  const end       = daily[daily.length-1];
+  const years     = ((end.date - start.date) / (365.25*864e5)).toFixed(1);
+  return { navFirst, peakEntry, peakRet, start, end, years };
+}
+
+/* ════════════════════════════════════════════════════════════
+   FORMAT HELPERS
+════════════════════════════════════════════════════════════ */
+const fmtUSD  = v => { if(v<0) return `(US$${Math.abs(v/1000).toFixed(0)}K)`; return v>=1e6?`US$${(v/1e6).toFixed(2)}M`:`US$${(v/1000).toFixed(0)}K`; };
+const fmtPct  = (v,plus=true) => (plus&&v>0?'+':'') + v.toFixed(1)+'%';
+const fmtDate = d => d.toLocaleString('en-HK',{year:'numeric',month:'short'});
+const setText = (id,val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+
+/* ════════════════════════════════════════════════════════════
+   RENDER STATS
+════════════════════════════════════════════════════════════ */
+function renderStats(stats) {
+  setText('h-peak',  fmtUSD(stats.peakEntry.nav));
+  setText('h-years', stats.years + ' Yrs');
+
+  setText('s-peaknav',      fmtUSD(stats.peakEntry.nav));
+  setText('s-peaknav-date', fmtDate(stats.peakEntry.date));
+  setText('s-peakret',      fmtPct(stats.peakRet));
+  setText('s-years',        stats.years + ' Yrs');
+  setText('s-daterange',    `${fmtDate(stats.start.date)} – ${fmtDate(stats.end.date)}`);
+  setText('perf-lead',      `Live portfolio performance — ${fmtDate(stats.start.date)} to ${fmtDate(stats.end.date)} — Base currency: USD (Col E).`);
+
+  document.getElementById('s-peakret').className = 'stat-card-value ' + (stats.peakRet >= 0 ? 'pos' : 'neg');
+}
+
+/* ════════════════════════════════════════════════════════════
+   CHART 1 — Portfolio NAV  (+ optional index comparison)
+════════════════════════════════════════════════════════════ */
+function buildNavChart(monthly, navFirst) {
+  if (navChartInst) navChartInst.destroy();
+
+  const comparing = showSP500 || showNasdaq;
+  const labels    = monthly.map(d => d.dateStr.slice(0,7));
+
+  /* In comparison mode: show return % from inception for all series */
+  const portfolioData = comparing
+    ? monthly.map(d => +((d.nav/navFirst - 1)*100).toFixed(2))
+    : monthly.map(d => Math.round(d.nav));
+
+  const datasets = [{
+    label: 'Portfolio',
+    data: portfolioData,
+    borderColor: GOLD, borderWidth: 2.5,
+    backgroundColor: ctx => {
+      const g = ctx.chart.ctx.createLinearGradient(0,0,0,280);
+      g.addColorStop(0,'rgba(201,168,76,0.22)'); g.addColorStop(1,'rgba(201,168,76,0)');
+      return g;
+    },
+    fill: true, tension: 0.35, pointRadius: 1.5, pointHoverRadius: 5, pointBackgroundColor: GOLD,
+  }];
+
+  /* Overlay S&P 500 */
+  if (showSP500 && indexCache.sp500) {
+    const aligned = alignIndex(indexCache.sp500, labels);
+    if (aligned) datasets.push({
+      label: 'S&P 500',
+      data: aligned,
+      borderColor: BLUE, borderWidth: 2,
+      backgroundColor: 'transparent',
+      fill: false, tension: 0.35, pointRadius: 1, pointHoverRadius: 5,
+      borderDash: [4,3],
+    });
+  }
+
+  /* Overlay Nasdaq */
+  if (showNasdaq && indexCache.nasdaq) {
+    const aligned = alignIndex(indexCache.nasdaq, labels);
+    if (aligned) datasets.push({
+      label: 'Nasdaq',
+      data: aligned,
+      borderColor: PURPLE, borderWidth: 2,
+      backgroundColor: 'transparent',
+      fill: false, tension: 0.35, pointRadius: 1, pointHoverRadius: 5,
+      borderDash: [6,3],
+    });
+  }
+
+  setText('nav-chart-title', comparing ? 'Portfolio vs Index — Return from Inception (%)' : 'Portfolio NAV — USD');
+  setText('nav-chart-note',  comparing ? 'All series normalized to 0% at portfolio inception date.' : '');
+
+  navChartInst = new Chart(document.getElementById('navChart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: {
+          display: comparing,
+          labels: { color: '#8899bb', boxWidth: 24, font: { size: 11 } }
+        },
+        tooltip: {
+          backgroundColor:'rgba(13,29,56,0.95)', borderColor:'rgba(201,168,76,0.4)', borderWidth:1,
+          callbacks: {
+            label: ctx => comparing
+              ? ` ${ctx.dataset.label}: ${ctx.parsed.y >= 0?'+':''}${ctx.parsed.y.toFixed(1)}%`
+              : ` US$${ctx.parsed.y.toLocaleString()}`
+          }
+        }
+      },
+      scales: {
+        x: { grid:{color:'rgba(201,168,76,0.05)'}, ticks:{maxTicksLimit:12} },
+        y: {
+          grid: {color:'rgba(201,168,76,0.05)'},
+          ticks: { callback: v => comparing ? v+'%' : (v>=1e6?'$'+(v/1e6).toFixed(1)+'M':'$'+(v/1000).toFixed(0)+'K') }
+        }
+      }
+    }
+  });
+}
+
+/* Align index data to chart's month labels, normalising to 0% at first portfolio date */
+function alignIndex(indexData, labels) {
+  if (!indexData || indexData.length === 0) return null;
+  const map = {};
+  for (const d of indexData) map[d.ym] = d.close;
+  // Find first available close for normalisation
+  let firstClose = null;
+  for (const lbl of labels) { if (map[lbl]) { firstClose = map[lbl]; break; } }
+  if (!firstClose) return null;
+  return labels.map(lbl => {
+    const c = map[lbl];
+    return c != null ? +((c/firstClose - 1)*100).toFixed(2) : null;
+  });
+}
+
+/* ════════════════════════════════════════════════════════════
+   CHART 2 — Portfolio Return from Inception (%)
+════════════════════════════════════════════════════════════ */
+function buildRetChart(monthly, navFirst) {
+  if (retChartInst) retChartInst.destroy();
+  const vals = monthly.map(d => +((d.nav/navFirst - 1)*100).toFixed(2));
+  retChartInst = new Chart(document.getElementById('retChart'), {
+    type: 'line',
+    data: {
+      labels: monthly.map(d => d.dateStr.slice(0,7)),
+      datasets: [{
+        data: vals,
+        borderWidth: 2,
+        segment: { borderColor: ctx => ctx.p1.parsed.y >= 0 ? GREEN : RED },
+        backgroundColor: 'transparent', fill: false, tension: 0.3,
+        pointRadius: 1.5, pointHoverRadius: 5,
+        pointBackgroundColor: vals.map(v => v>=0 ? GREEN : RED),
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {display:false},
+        tooltip: {
+          backgroundColor:'rgba(13,29,56,0.95)', borderColor:'rgba(201,168,76,0.4)', borderWidth:1,
+          callbacks:{ label: ctx => ` ${ctx.parsed.y>=0?'+':''}${ctx.parsed.y.toFixed(1)}%` }
+        }
+      },
+      scales: {
+        x:{grid:{color:'rgba(201,168,76,0.05)'},ticks:{maxTicksLimit:8}},
+        y:{grid:{color:'rgba(201,168,76,0.05)'},ticks:{callback:v=>v+'%'}}
+      }
+    }
+  });
+}
+
+/* ════════════════════════════════════════════════════════════
+   CHART 3 — Asset Allocation (Cash % vs Equity %)
+════════════════════════════════════════════════════════════ */
+function buildAllocChart(monthly) {
+  if (allocChartInst) allocChartInst.destroy();
+  const labels  = monthly.map(d => d.dateStr.slice(0,7));
+  const cashPct = monthly.map(d => +(d.cash  * 100).toFixed(1));
+  const eqPct   = monthly.map(d => +(d.equity* 100).toFixed(1));
+
+  const isArea = allocMode === 'area';
+
+  allocChartInst = new Chart(document.getElementById('allocChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Equity %',
+          data: eqPct,
+          borderColor: GOLD, borderWidth: 2,
+          backgroundColor: isArea ? 'rgba(201,168,76,0.35)' : 'transparent',
+          fill: isArea,      // fills to y=0; stacking handled by y.stacked below
+          tension: 0.3, pointRadius: 1, pointHoverRadius: 4,
+          order: 2,
+        },
+        {
+          label: 'Cash %',
+          data: cashPct,
+          borderColor: BLUE, borderWidth: 2,
+          backgroundColor: isArea ? 'rgba(59,130,246,0.45)' : 'transparent',
+          fill: isArea,
+          tension: 0.3, pointRadius: 1, pointHoverRadius: 4,
+          order: 1,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: {mode:'index',intersect:false},
+      plugins: {
+        legend: { display:true, labels:{color:'#8899bb',boxWidth:20,font:{size:11}} },
+        tooltip: {
+          backgroundColor:'rgba(13,29,56,0.95)', borderColor:'rgba(201,168,76,0.4)', borderWidth:1,
+          callbacks:{
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`,
+            footer: items => {
+              const total = items.reduce((s,i)=>s+i.parsed.y,0);
+              return `Total: ${total.toFixed(1)}%`;
+            }
+          }
+        }
+      },
+      scales: {
+        x:{grid:{color:'rgba(201,168,76,0.05)'},ticks:{maxTicksLimit:10,color:'#8899bb'}},
+        y:{
+          stacked: isArea,   // ← key fix: enables proper area stacking
+          min:0, max:100,
+          grid:{color:'rgba(201,168,76,0.05)'},
+          ticks:{callback:v=>v+'%',color:'#8899bb'}
+        }
+      }
+    }
+  });
+}
+
+/* ════════════════════════════════════════════════════════════
+   ANNUAL TABLE  — year-over-year return based on col E NAV
+════════════════════════════════════════════════════════════ */
+function buildTable(yearly, navFirst) {
+  const tbody = document.getElementById('yearly-tbody');
+  const rets = yearly.map((d,i) => {
+    const prevNav = i===0 ? navFirst : yearly[i-1].nav;
+    return (d.nav / prevNav - 1) * 100;
+  });
+  const maxAbs = Math.max(...rets.map(Math.abs));
+
+  tbody.innerHTML = yearly.map((row, i) => {
+    const pct = +rets[i].toFixed(1);
+    const w   = (Math.abs(pct)/maxAbs*100).toFixed(1);
+    const cls = pct>=0 ? 'pos' : 'neg';
+    const bar = pct>=0 ? 'bar-p' : 'bar-n';
+    const navStr = row.nav<0
+      ? `<span class="neg">(US$${Math.abs(row.nav/1000).toFixed(0)}K)</span>`
+      : `US$${row.nav>=1e6?(row.nav/1e6).toFixed(2)+'M':(row.nav/1000).toFixed(0)+'K'}`;
+    return `<tr>
+      <td>${row.dateStr.slice(0,4)}</td>
+      <td>${navStr}</td>
+      <td class="${cls}">${pct>=0?'+':''}${pct}%</td>
+      <td><div class="bar-cell"><div class="bar-bg"><div class="bar-fill ${bar}" style="width:${w}%"></div></div></div></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ════════════════════════════════════════════════════════════
+   INDEX COMPARISON — static monthly closes (Sep 2017 – Feb 2023)
+   Source: S&P 500 (^GSPC) and Nasdaq Composite (^IXIC)
+════════════════════════════════════════════════════════════ */
+const SP500_CLOSES = {
+  '2017-09':2519.36,'2017-10':2575.26,'2017-11':2647.58,'2017-12':2673.61,
+  '2018-01':2823.81,'2018-02':2713.83,'2018-03':2640.87,'2018-04':2648.05,
+  '2018-05':2705.27,'2018-06':2718.37,'2018-07':2816.29,'2018-08':2901.52,
+  '2018-09':2913.98,'2018-10':2711.74,'2018-11':2760.17,'2018-12':2506.85,
+  '2019-01':2704.10,'2019-02':2784.49,'2019-03':2834.40,'2019-04':2945.83,
+  '2019-05':2752.06,'2019-06':2941.76,'2019-07':2980.38,'2019-08':2926.46,
+  '2019-09':2976.74,'2019-10':3037.56,'2019-11':3140.98,'2019-12':3230.78,
+  '2020-01':3225.52,'2020-02':2954.22,'2020-03':2584.59,'2020-04':2912.43,
+  '2020-05':3044.31,'2020-06':3100.29,'2020-07':3271.12,'2020-08':3500.31,
+  '2020-09':3363.46,'2020-10':3269.96,'2020-11':3621.63,'2020-12':3756.07,
+  '2021-01':3714.24,'2021-02':3811.15,'2021-03':3972.89,'2021-04':4181.17,
+  '2021-05':4204.11,'2021-06':4297.50,'2021-07':4395.26,'2021-08':4522.68,
+  '2021-09':4307.54,'2021-10':4605.38,'2021-11':4567.00,'2021-12':4766.18,
+  '2022-01':4515.55,'2022-02':4373.94,'2022-03':4530.41,'2022-04':4131.93,
+  '2022-05':4132.15,'2022-06':3785.38,'2022-07':4130.29,'2022-08':3955.00,
+  '2022-09':3585.62,'2022-10':3901.06,'2022-11':4080.11,'2022-12':3839.50,
+  '2023-01':4076.60,'2023-02':3970.15,'2023-03':4109.31,'2023-04':4169.48,
+  '2023-05':4179.83,'2023-06':4450.38,'2023-07':4588.96,'2023-08':4507.66,
+  '2023-09':4288.05,'2023-10':4193.80,'2023-11':4567.80,'2023-12':4769.83,
+  '2024-01':4845.65,'2024-02':5096.27,'2024-03':5254.35,'2024-04':5035.69,
+  '2024-05':5277.51,'2024-06':5460.48,'2024-07':5522.30,'2024-08':5648.40,
+  '2024-09':5762.48,'2024-10':5705.45,'2024-11':5956.06,'2024-12':5881.63,
+};
+
+const NASDAQ_CLOSES = {
+  '2017-09':6495.96,'2017-10':6727.67,'2017-11':6873.97,'2017-12':6903.39,
+  '2018-01':7411.48,'2018-02':7167.79,'2018-03':6967.78,'2018-04':7066.27,
+  '2018-05':7442.12,'2018-06':7510.30,'2018-07':7671.79,'2018-08':8109.54,
+  '2018-09':8046.35,'2018-10':7305.90,'2018-11':7330.54,'2018-12':6635.28,
+  '2019-01':7281.74,'2019-02':7532.53,'2019-03':7729.32,'2019-04':8095.39,
+  '2019-05':7453.15,'2019-06':8006.24,'2019-07':8175.42,'2019-08':7962.88,
+  '2019-09':7999.34,'2019-10':8292.36,'2019-11':8664.78,'2019-12':8945.99,
+  '2020-01':9150.94,'2020-02':8567.37,'2020-03':7700.10,'2020-04':8914.71,
+  '2020-05':9491.78,'2020-06':10058.77,'2020-07':10745.27,'2020-08':11775.46,
+  '2020-09':11167.51,'2020-10':10911.59,'2020-11':12198.74,'2020-12':12888.28,
+  '2021-01':13070.69,'2021-02':13192.35,'2021-03':13246.87,'2021-04':13752.24,
+  '2021-05':13756.33,'2021-06':14503.95,'2021-07':14672.68,'2021-08':15259.24,
+  '2021-09':14448.58,'2021-10':15498.39,'2021-11':15537.69,'2021-12':15644.97,
+  '2022-01':14261.50,'2022-02':13751.40,'2022-03':14220.52,'2022-04':12334.64,
+  '2022-05':11834.11,'2022-06':11028.74,'2022-07':12390.69,'2022-08':11630.51,
+  '2022-09':10575.62,'2022-10':10971.41,'2022-11':11630.51,'2022-12':10939.54,
+  '2023-01':11621.71,'2023-02':11689.01,'2023-03':12221.91,'2023-04':12226.58,
+  '2023-05':12975.69,'2023-06':13787.92,'2023-07':14316.66,'2023-08':13973.43,
+  '2023-09':13219.32,'2023-10':12851.24,'2023-11':14226.22,'2023-12':15011.35,
+  '2024-01':15361.26,'2024-02':15996.82,'2024-03':16379.46,'2024-04':15657.82,
+  '2024-05':16735.02,'2024-06':17733.18,'2024-07':17599.05,'2024-08':17713.62,
+  '2024-09':17925.12,'2024-10':18095.15,'2024-11':19890.26,'2024-12':19310.79,
+};
+
+/* Pre-load static data into cache — buttons work instantly, no network needed */
+function initIndexCache() {
+  indexCache.sp500  = Object.entries(SP500_CLOSES).map(([ym,close])=>({ym,close}));
+  indexCache.nasdaq = Object.entries(NASDAQ_CLOSES).map(([ym,close])=>({ym,close}));
+}
+
+/* ── Fetch live monthly index data from Yahoo Finance ──────────────────────
+   Uses the yfinance-backed chart API (v8). Tries direct first, then falls
+   back through a lightweight CORS proxy (allorigins.win).
+   On success the static cache is fully replaced with live data.              */
+const STATIC_END = '2024-12';   // extent of embedded fallback data
+
+async function fetchYahooMonthly(ticker, startYM, endYM) {
+  // Unix timestamps — ticker must be the raw symbol e.g. "^GSPC" (not pre-encoded)
+  const p1 = Math.floor(new Date(startYM + '-01T00:00:00Z').getTime() / 1000);
+  const endDate = new Date(endYM + '-01T00:00:00Z');
+  endDate.setMonth(endDate.getMonth() + 2);   // overshoot so last candle closes
+  const p2 = Math.floor(endDate.getTime() / 1000);
+
+  const apiUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}` +
+                 `?interval=1mo&period1=${p1}&period2=${p2}`;
+
+  // Try direct, then two independent CORS proxies
+  const attempts = [
+    apiUrl,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(apiUrl)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(apiUrl)}`,
+  ];
+
+  for (const url of attempts) {
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!resp.ok) { console.warn(`[index] ${ticker} HTTP ${resp.status} from ${url.slice(0,60)}`); continue; }
+      const json = await resp.json();
+      const result = json?.chart?.result?.[0];
+      if (!result) continue;
+
+      const timestamps = result.timestamp || [];
+      const closes     = result.indicators?.quote?.[0]?.close || [];
+
+      const out = {};
+      timestamps.forEach((ts, i) => {
+        if (closes[i] == null) return;
+        const d  = new Date(ts * 1000);
+        const ym = d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+        if (ym >= startYM && ym <= endYM) out[ym] = closes[i];
+      });
+
+      if (Object.keys(out).length > 5) {
+        console.log(`[index] ${ticker}: ${Object.keys(out).length} months fetched live`);
+        return out;
+      }
+    } catch (e) {
+      console.warn(`[index] ${ticker} fetch failed (${url.slice(0,60)}):`, e.message);
+    }
+  }
+  return null;   // all attempts failed — caller falls back to static data
+}
+
+async function extendIndexToDate(portfolioEndYM) {
+  const startYM = indexCache.sp500[0]?.ym ?? '2017-09';
+
+  // Raw Yahoo Finance ticker symbols (NOT pre-encoded)
+  const sources = [
+    { key: 'sp500',  yahoo: '^GSPC' },    // S&P 500
+    { key: 'nasdaq', yahoo: '^IXIC' },    // Nasdaq Composite
+  ];
+
+  let updated = false;
+  for (const { key, yahoo } of sources) {
+    const fresh = await fetchYahooMonthly(yahoo, startYM, portfolioEndYM);
+    if (fresh) {
+      // Merge: static provides baseline, live data overwrites / extends
+      const merged = {
+        ...Object.fromEntries(indexCache[key].map(x => [x.ym, x.close])),
+        ...fresh
+      };
+      indexCache[key] = Object.entries(merged)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([ym, close]) => ({ ym, close }));
+      updated = true;
+    } else {
+      console.warn(`[index] ${key}: using static fallback data (Yahoo Finance unreachable)`);
+    }
+  }
+
+  // Refresh chart if an index toggle is already active
+  if (updated && (showSP500 || showNasdaq)) {
+    buildNavChart(portfolioMonthly, portfolioMonthly[0].nav);
+  }
+}
+
+/* Toggle handler — synchronous (static data pre-loaded), instant response */
+function toggleIndex(symbol) {
+  if (symbol === 'sp500') showSP500 = !showSP500;
+  else                    showNasdaq = !showNasdaq;
+
+  const isOn  = symbol === 'sp500' ? showSP500 : showNasdaq;
+  const btn   = document.getElementById('btn-' + symbol);
+  const label = symbol === 'sp500' ? 'S&P 500' : 'Nasdaq';
+  btn.textContent = isOn ? '✓ ' + label : '+ ' + label;
+  btn.classList.toggle('active', isOn);
+
+  buildNavChart(portfolioMonthly, portfolioMonthly[0].nav);
+}
+
+/* Allocation mode toggle */
+function setAllocMode(mode) {
+  allocMode = mode;
+  document.getElementById('btn-alloc-area').classList.toggle('active', mode==='area');
+  document.getElementById('btn-alloc-line').classList.toggle('active', mode==='line');
+  buildAllocChart(portfolioMonthly);
+}
+
+/* ════════════════════════════════════════════════════════════
+   STATUS
+════════════════════════════════════════════════════════════ */
+function setStatus(type, msg) {
+  document.getElementById('status-dot').className = 'data-status-dot ' + type;
+  document.getElementById('status-text').textContent = msg;
+}
+
+/* ════════════════════════════════════════════════════════════
+   MAIN
+════════════════════════════════════════════════════════════ */
+async function main() {
+  try {
+    const daily = await fetchSheetData();
+    portfolioMonthly   = toMonthly(daily);
+    const yearly       = toYearly(portfolioMonthly);
+    const stats        = computeStats(daily, portfolioMonthly);
+    const navFirst     = portfolioMonthly[0].nav;
+
+    renderStats(stats);
+    buildNavChart(portfolioMonthly, navFirst);
+    buildRetChart(portfolioMonthly, navFirst);
+    buildAllocChart(portfolioMonthly);
+    buildTable(yearly, navFirst);
+
+    const now = new Date().toLocaleString('en-HK',{dateStyle:'medium',timeStyle:'short'});
+    setStatus('live', `Live data · Updated ${now}`);
+
+    // Silently extend index data to match portfolio end date (background fetch)
+    const portfolioEndYM = portfolioMonthly[portfolioMonthly.length - 1].dateStr.slice(0, 7);
+    extendIndexToDate(portfolioEndYM);
+  } catch(err) {
+    console.error(err);
+    setStatus('error', 'Could not load live data — showing cached data');
+    document.getElementById('error-banner').style.display = 'block';
+    document.getElementById('error-banner').textContent = '⚠ ' + err.message + '. Ensure the sheet is shared "Anyone with link can view" and published to web.';
+    loadFallback();
+  } finally {
+    setTimeout(() => {
+      const ol = document.getElementById('loading-overlay');
+      ol.classList.add('hidden');
+      setTimeout(() => ol.remove(), 600);
+    }, 700);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   FALLBACK — static monthly data from Col E (USD NAV ≈ HKD/7.8)
+   and approximate allocation from Col O / Col P
+════════════════════════════════════════════════════════════ */
+function loadFallback() {
+  // [dateStr, nav_usd, cash_pct, equity_pct]
+  const raw = [
+    ['2017-09-29', 10386, 0.10, 0.90],['2017-10-31', 12052, 0.14, 0.86],
+    ['2017-11-30', 13598, 0.01, 0.99],['2017-12-29', 13230, 0.12, 0.88],
+    ['2018-01-31', 19403, 0.08, 0.92],['2018-02-28', 18191, 0.12, 0.88],
+    ['2018-03-30', 17509, 0.10, 0.90],['2018-04-30', 20445, 0.11, 0.89],
+    ['2018-05-31', 22381, 0.09, 0.91],['2018-06-29', 22164, 0.10, 0.90],
+    ['2018-07-31', 23928, 0.10, 0.90],['2018-08-31', 25196, 0.08, 0.92],
+    ['2018-09-28', 25097, 0.12, 0.88],['2018-10-31', 22981, 0.15, 0.85],
+    ['2018-11-30', 21069, 0.14, 0.86],['2018-12-31', 31453, 0.18, 0.82],
+    ['2019-01-31', 39758, 0.10, 0.90],['2019-02-28', 41550, 0.10, 0.90],
+    ['2019-03-29', 43646, 0.09, 0.91],['2019-04-30', 49874, 0.10, 0.90],
+    ['2019-05-31', 48011, 0.11, 0.89],['2019-06-28', 51349, 0.08, 0.92],
+    ['2019-07-31', 59977, 0.07, 0.93],['2019-08-30', 58520, 0.10, 0.90],
+    ['2019-09-30', 60390, 0.09, 0.91],['2019-10-31', 63919, 0.08, 0.92],
+    ['2019-11-29', 67416, 0.07, 0.93],['2019-12-31', 76026, 0.08, 0.92],
+    ['2020-01-31', 77074, 0.09, 0.91],['2020-02-28', 70235, 0.12, 0.88],
+    ['2020-03-31', 42959, 0.22, 0.78],['2020-04-30', 56528, 0.14, 0.86],
+    ['2020-05-29', 68004, 0.10, 0.90],['2020-06-30', 78085, 0.09, 0.91],
+    ['2020-07-31', 89711, 0.08, 0.92],['2020-08-31',116077, 0.07, 0.93],
+    ['2020-09-30',129449, 0.08, 0.92],['2020-10-30',109977, 0.10, 0.90],
+    ['2020-11-30',164267, 0.07, 0.93],['2020-12-31',210503, 0.06, 0.94],
+    ['2021-01-31',318614, 0.05, 0.95],['2021-02-26',270196, 0.07, 0.93],
+    ['2021-03-31',256481, 0.09, 0.91],['2021-04-30',243111, 0.10, 0.90],
+    ['2021-05-31',237674, 0.11, 0.89],['2021-06-30',242564, 0.09, 0.91],
+    ['2021-07-30',207374, 0.13, 0.87],['2021-08-31',223426, 0.10, 0.90],
+    ['2021-09-30',197162, 0.12, 0.88],['2021-10-29',219202, 0.09, 0.91],
+    ['2021-11-30',168007, 0.14, 0.86],['2021-12-31', 86423, 0.20, 0.80],
+    ['2022-01-31', 91752, 0.22, 0.78],['2022-02-28', 77926, 0.25, 0.75],
+    ['2022-03-31', 76951, 0.24, 0.76],['2022-04-29', 58644, 0.28, 0.72],
+    ['2022-05-31', 54111, 0.30, 0.70],['2022-06-30', 40470, 0.35, 0.65],
+    ['2022-07-29', 55219, 0.28, 0.72],['2022-08-31', 45467, 0.32, 0.68],
+    ['2022-09-30', 35669, 0.38, 0.62],['2022-10-31', 38531, 0.35, 0.65],
+    ['2022-11-30', 48910, 0.30, 0.70],['2022-12-30', 16957, 0.45, 0.55],
+    ['2023-01-31', 14497, 0.48, 0.52],['2023-02-27', -8588, 0.55, 0.45],
+  ];
+  portfolioMonthly = raw.map(r => ({
+    date: new Date(r[0]), dateStr: r[0], nav: r[1], cash: r[2], equity: r[3]
+  }));
+
+  const navFirst = portfolioMonthly[0].nav;
+  const yearly   = toYearly(portfolioMonthly);
+  const peakEntry= portfolioMonthly.reduce((a,b)=>b.nav>a.nav?b:a);
+  const stats = {
+    navFirst, peakEntry,
+    peakRet: (peakEntry.nav/navFirst-1)*100,
+    start: portfolioMonthly[0], end: portfolioMonthly[portfolioMonthly.length-1],
+    years: '5.4',
+  };
+
+  renderStats(stats);
+  buildNavChart(portfolioMonthly, navFirst);
+  buildRetChart(portfolioMonthly, navFirst);
+  buildAllocChart(portfolioMonthly);
+  buildTable(yearly, navFirst);
+  // Static fallback ends Feb 2023 — attempt live extension just in case
+  extendIndexToDate('2023-02');
+}
+
+/* ════════════════════════════════════════════════════════════
+   SCROLL ANIMATION & NAV HIGHLIGHT
+════════════════════════════════════════════════════════════ */
+const observer = new IntersectionObserver(
+  es => es.forEach(e => { if(e.isIntersecting) e.target.classList.add('visible'); }),
+  { threshold: 0.1 }
+);
+document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('.nav-links a');
+window.addEventListener('scroll', () => {
+  let cur = '';
+  sections.forEach(s => { if(window.scrollY >= s.offsetTop-120) cur=s.id; });
+  navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href')==='#'+cur));
+});
+
+initIndexCache();
+main();
+</script>
+</body>
+</html>
