@@ -500,11 +500,12 @@ function parseGviz(rows) {
     const g = i => { const x=c[i]; return (x&&x.v!=null)?Number(x.v):null; };
     const nav = g(COL.NAV);
     if (nav == null || nav === 0) continue;
+    const pct = v => { if (v == null) return 0; return Math.abs(v) > 1 ? v / 100 : v; };
     result.push({
       date, dateStr: date.toISOString().slice(0,10),
       nav,
-      cash  : g(COL.PCT_CASH) ?? 0,
-      equity: g(COL.PCT_EQ)   ?? 0,
+      cash  : pct(g(COL.PCT_CASH)),
+      equity: pct(g(COL.PCT_EQ)),
     });
   }
   return result;
@@ -516,7 +517,7 @@ function parseGviz(rows) {
 function toMonthly(data) {
   const map = {};
   for (const d of data) { map[d.dateStr.slice(0,7)] = d; }
-  return Object.values(map);
+  return Object.values(map).sort((a, b) => a.dateStr.localeCompare(b.dateStr));
 }
 
 function toYearly(monthly) {
@@ -830,6 +831,9 @@ const SP500_CLOSES = {
   '2024-01':4845.65,'2024-02':5096.27,'2024-03':5254.35,'2024-04':5035.69,
   '2024-05':5277.51,'2024-06':5460.48,'2024-07':5522.30,'2024-08':5648.40,
   '2024-09':5762.48,'2024-10':5705.45,'2024-11':5956.06,'2024-12':5881.63,
+  // 2025: approximate month-end closes — add SP500 sheet tab to Google Sheets for live data
+  '2025-01':5867.08,'2025-02':6032.38,'2025-03':5686.42,'2025-04':5274.68,
+  '2025-05':5347.75,'2025-06':5561.24,'2025-07':5588.27,
 };
 
 const NASDAQ_CLOSES = {
@@ -855,6 +859,9 @@ const NASDAQ_CLOSES = {
   '2024-01':15361.26,'2024-02':15996.82,'2024-03':16379.46,'2024-04':15657.82,
   '2024-05':16735.02,'2024-06':17733.18,'2024-07':17599.05,'2024-08':17713.62,
   '2024-09':17925.12,'2024-10':18095.15,'2024-11':19890.26,'2024-12':19310.79,
+  // 2025: approximate month-end closes — add NASDAQ sheet tab to Google Sheets for live data
+  '2025-01':19161.28,'2025-02':20765.43,'2025-03':18070.19,'2025-04':17178.35,
+  '2025-05':18039.47,'2025-06':18855.23,'2025-07':19476.86,
 };
 
 /* Pre-load static data into cache — buttons work instantly, no network needed */
@@ -867,7 +874,7 @@ function initIndexCache() {
    Reads "SP500" and "NASDAQ" sheet tabs from the same published spreadsheet.
    No API keys, no CORS issues — same domain as the portfolio data.
    Setup: add two sheet tabs to your Google Sheet (instructions in README).   */
-const STATIC_END = '2024-12';   // extent of embedded fallback data
+const STATIC_END = '2025-07';   // extent of embedded fallback data (approximate beyond 2024-12)
 
 async function fetchGoogleSheetIndex(sheetName) {
   const url = `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?output=csv&sheet=${encodeURIComponent(sheetName)}`;
