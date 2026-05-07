@@ -707,8 +707,21 @@ function buildRetChart(monthly, navFirst) {
 function buildAllocChart(monthly) {
   if (allocChartInst) allocChartInst.destroy();
   const labels  = monthly.map(d => d.dateStr.slice(0,7));
-  const eqPct   = monthly.map(d => +(d.equity * 100).toFixed(1));
-  const cashPct = monthly.map(d => +(d.cash   * 100).toFixed(1));
+
+  // Normalise each row so equity + cash = 1.0 exactly.
+  // This prevents the stacked-area top from drifting away from 100% when
+  // source data has missing values or doesn't sum cleanly (e.g. a month
+  // where only equity is recorded and cash parses as 0).
+  const norm = monthly.map(d => {
+    const eq = Math.max(0, d.equity || 0);
+    const cs = Math.max(0, d.cash   || 0);
+    const total = eq + cs;
+    if (total > 0.01) return { eq: eq / total, cs: cs / total };
+    return { eq: 0, cs: 1 };   // default all-cash when both values are missing
+  });
+
+  const eqPct   = norm.map(d => +(d.eq * 100).toFixed(1));
+  const cashPct = norm.map(d => +(d.cs * 100).toFixed(1));
 
   const isArea = allocMode === 'area';
 
@@ -716,8 +729,9 @@ function buildAllocChart(monthly) {
   // that fill:'-1' colours only the band between the equity line and the top,
   // giving a true stacked-area look WITHOUT Chart.js's y.stacked (which breaks
   // tooltips by reporting cumulative values instead of actual ones).
+  // After normalisation equity + cash = 1.0, so this is always exactly 100.
   const cashData = isArea
-    ? monthly.map(d => +((d.equity + d.cash) * 100).toFixed(1))
+    ? norm.map(() => 100)   // always 100% after normalisation — clean flat ceiling
     : cashPct;
 
   allocChartInst = new Chart(document.getElementById('allocChart'), {
@@ -753,13 +767,14 @@ function buildAllocChart(monthly) {
           backgroundColor:'rgba(13,29,56,0.95)', borderColor:'rgba(201,168,76,0.4)', borderWidth:1,
           callbacks:{
             label: ctx => {
-              // In area mode Cash's raw value is equity+cash; subtract equity to
-              // display the actual cash percentage.
-              let val = ctx.parsed.y;
+              // In area mode: dataset 0 = Equity % (actual), dataset 1 = Cash %
+              // The Cash dataset is plotted at 100 (flat ceiling after normalisation).
+              // Show the real cash value from cashPct instead.
               if (isArea && ctx.datasetIndex === 1) {
-                val = val - ctx.chart.data.datasets[0].data[ctx.dataIndex];
+                const actualCash = cashPct[ctx.dataIndex];
+                return ` Cash %: ${(actualCash ?? 0).toFixed(1)}%`;
               }
-              return ` ${ctx.dataset.label}: ${val.toFixed(1)}%`;
+              return ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`;
             }
           }
         }
@@ -877,13 +892,13 @@ function initIndexCache() {
 const STATIC_END = '2025-07';   // extent of embedded fallback data (approximate beyond 2024-12)
 
 async function fetchGoogleSheetIndex(sheetName) {
-  const url = `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?output=csv&sheet=${encodeURIComponent(sheetName)}`;
+  // ── Method 1: Published CSV ──
+  const csvUrl = `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?output=csv&sheet=${encodeURIComponent(sheetName)}`;
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(csvUrl);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const text = await resp.text();
     const lines = text.replace(/\r/g, '').split('\n');
-
     const out = {};
     for (let i = 1; i < lines.length; i++) {   // skip header row
       const cols = splitCSV(lines[i]);
@@ -897,17 +912,54 @@ async function fetchGoogleSheetIndex(sheetName) {
       const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
       out[ym] = close;
     }
-
     const count = Object.keys(out).length;
     if (count > 5) {
       const last = Object.keys(out).sort().at(-1);
-      console.log(`[index] Google Sheets "${sheetName}": ${count} months loaded, latest ${last}`);
+      console.log(`[index] CSV "${sheetName}": ${count} months, latest ${last}`);
       return out;
     }
-    console.warn(`[index] "${sheetName}" sheet returned too few rows (${count}) — tab may not exist yet`);
+    throw new Error(`CSV returned only ${count} rows`);
+  } catch (e) {
+    console.warn(`[index] CSV "${sheetName}" failed: ${e.message} — trying gviz…`);
+  }
+
+  // ── Method 2: gviz (works when sheet is "Anyone with link can view", no re-publish needed) ──
+  try {
+    const gvizUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
+    const resp = await fetch(gvizUrl);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const text = await resp.text();
+    const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/);
+    if (!match) throw new Error('gviz: bad format');
+    const gviz = JSON.parse(match[1]);
+    if (gviz.status === 'error') throw new Error(gviz.errors?.[0]?.detailed_message);
+    const rows = gviz.table?.rows || [];
+    const out = {};
+    for (const row of rows) {
+      if (!row.c || row.c.length < 2) continue;
+      const dc = row.c[0], vc = row.c[1];
+      if (!dc || dc.v == null || !vc || vc.v == null) continue;
+      let d;
+      if (typeof dc.v === 'string' && dc.v.startsWith('Date(')) {
+        const p = dc.v.slice(5, -1).split(',').map(Number);
+        d = new Date(p[0], p[1], p[2]);
+      } else { d = new Date(dc.v); }
+      if (isNaN(d.getTime())) continue;
+      const close = Number(vc.v);
+      if (isNaN(close) || close <= 0) continue;
+      const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      out[ym] = close;
+    }
+    const count = Object.keys(out).length;
+    if (count > 5) {
+      const last = Object.keys(out).sort().at(-1);
+      console.log(`[index] gviz "${sheetName}": ${count} months, latest ${last}`);
+      return out;
+    }
+    console.warn(`[index] gviz "${sheetName}": too few rows (${count}) — tab may not exist yet`);
     return null;
   } catch (e) {
-    console.warn(`[index] Google Sheets "${sheetName}" fetch failed:`, e.message);
+    console.warn(`[index] gviz "${sheetName}" failed:`, e.message);
     return null;
   }
 }
