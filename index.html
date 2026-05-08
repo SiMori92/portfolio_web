@@ -309,7 +309,7 @@
         <div class="chart-header">
           <div class="chart-title">Asset Allocation — Monthly</div>
           <div class="toggle-group">
-            <button class="toggle-btn active" id="btn-alloc-area"  onclick="setAllocMode('area')">Stacked</button>
+            <button class="toggle-btn active" id="btn-alloc-area"  onclick="setAllocMode('bar')">Bar</button>
             <button class="toggle-btn"        id="btn-alloc-line"  onclick="setAllocMode('line')">Lines</button>
           </div>
         </div>
@@ -418,7 +418,7 @@ let navChartInst, retChartInst, allocChartInst;
 let portfolioMonthly = [];       // monthly snapshots [{dateStr, nav, cash, equity}]
 let indexCache = {};             // { sp500: [{ym, close}], nasdaq: [...] }
 let showSP500 = false, showNasdaq = false;
-let allocMode = 'area';          // 'area' | 'line'
+let allocMode = 'bar';           // 'bar' | 'line'
 
 /* ════════════════════════════════════════════════════════════
    FETCH — Published CSV (primary) → gviz (fallback)
@@ -706,85 +706,83 @@ function buildRetChart(monthly, navFirst) {
 ════════════════════════════════════════════════════════════ */
 function buildAllocChart(monthly) {
   if (allocChartInst) allocChartInst.destroy();
-  const labels  = monthly.map(d => d.dateStr.slice(0,7));
+  const labels = monthly.map(d => d.dateStr.slice(0,7));
 
   // Normalise each row so equity + cash = 1.0 exactly.
-  // This prevents the stacked-area top from drifting away from 100% when
-  // source data has missing values or doesn't sum cleanly (e.g. a month
-  // where only equity is recorded and cash parses as 0).
   const norm = monthly.map(d => {
     const eq = Math.max(0, d.equity || 0);
     const cs = Math.max(0, d.cash   || 0);
     const total = eq + cs;
     if (total > 0.01) return { eq: eq / total, cs: cs / total };
-    return { eq: 0, cs: 1 };   // default all-cash when both values are missing
+    return { eq: 0, cs: 1 };
   });
 
   const eqPct   = norm.map(d => +(d.eq * 100).toFixed(1));
   const cashPct = norm.map(d => +(d.cs * 100).toFixed(1));
 
-  const isArea = allocMode === 'area';
+  const isBar = allocMode === 'bar';
 
-  // In area mode: Cash dataset carries the CUMULATIVE (equity + cash) value so
-  // that fill:'-1' colours only the band between the equity line and the top,
-  // giving a true stacked-area look WITHOUT Chart.js's y.stacked (which breaks
-  // tooltips by reporting cumulative values instead of actual ones).
-  // After normalisation equity + cash = 1.0, so this is always exactly 100.
-  const cashData = isArea
-    ? norm.map(() => 100)   // always 100% after normalisation — clean flat ceiling
-    : cashPct;
+  // ── Stacked Bar mode (default) ───────────────────────────────────────────
+  // Chart.js bar chart with stacking handles cumulative layout and tooltips
+  // automatically — each dataset value is the ACTUAL %, no tricks needed.
+  // ── Lines mode ──────────────────────────────────────────────────────────
+  // Plain lines showing equity % and cash % independently over time.
 
   allocChartInst = new Chart(document.getElementById('allocChart'), {
-    type: 'line',
+    type: isBar ? 'bar' : 'line',
     data: {
       labels,
       datasets: [
         {
           label: 'Equity %',
           data: eqPct,
-          borderColor: GOLD, borderWidth: 2,
-          backgroundColor: isArea ? 'rgba(201,168,76,0.45)' : 'transparent',
-          fill: isArea ? 'origin' : false,
-          tension: 0.3, pointRadius: 1, pointHoverRadius: 4,
+          backgroundColor: isBar ? 'rgba(201,168,76,0.85)' : 'transparent',
+          borderColor: GOLD,
+          borderWidth: isBar ? 0 : 2,
+          fill: false,
+          tension: 0.3,
+          pointRadius: isBar ? 0 : 1.5,
+          pointHoverRadius: 4,
+          ...(isBar ? { stack: 'alloc' } : {}),
         },
         {
           label: 'Cash %',
-          // area mode: cumulative top; line mode: actual cash value
-          data: cashData,
-          borderColor: BLUE, borderWidth: 2,
-          backgroundColor: isArea ? 'rgba(59,130,246,0.45)' : 'transparent',
-          fill: isArea ? '-1' : false,  // fills from Equity line upward
-          tension: 0.3, pointRadius: 1, pointHoverRadius: 4,
+          data: cashPct,
+          backgroundColor: isBar ? 'rgba(59,130,246,0.75)' : 'transparent',
+          borderColor: BLUE,
+          borderWidth: isBar ? 0 : 2,
+          fill: false,
+          tension: 0.3,
+          pointRadius: isBar ? 0 : 1.5,
+          pointHoverRadius: 4,
+          ...(isBar ? { stack: 'alloc' } : {}),
         }
       ]
     },
     options: {
       responsive: true,
-      interaction: {mode:'index',intersect:false},
+      interaction: { mode:'index', intersect:false },
       plugins: {
-        legend: { display:true, labels:{color:'#8899bb',boxWidth:20,font:{size:11}} },
+        legend: { display:true, labels:{color:'#8899bb', boxWidth:16, font:{size:11}} },
         tooltip: {
           backgroundColor:'rgba(13,29,56,0.95)', borderColor:'rgba(201,168,76,0.4)', borderWidth:1,
           callbacks:{
-            label: ctx => {
-              // In area mode: dataset 0 = Equity % (actual), dataset 1 = Cash %
-              // The Cash dataset is plotted at 100 (flat ceiling after normalisation).
-              // Show the real cash value from cashPct instead.
-              if (isArea && ctx.datasetIndex === 1) {
-                const actualCash = cashPct[ctx.dataIndex];
-                return ` Cash %: ${(actualCash ?? 0).toFixed(1)}%`;
-              }
-              return ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`;
-            }
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`
           }
         }
       },
       scales: {
-        x:{grid:{color:'rgba(201,168,76,0.05)'},ticks:{maxTicksLimit:10,color:'#8899bb'}},
-        y:{
+        x: {
+          stacked: isBar,
+          grid: { color:'rgba(201,168,76,0.05)' },
+          ticks: { maxTicksLimit:12, color:'#8899bb' },
+          ...(isBar ? { barPercentage:1.0, categoryPercentage:1.0 } : {})
+        },
+        y: {
+          stacked: isBar,
           min:0, max:100,
-          grid:{color:'rgba(201,168,76,0.05)'},
-          ticks:{callback:v=>v+'%',color:'#8899bb'}
+          grid: { color:'rgba(201,168,76,0.05)' },
+          ticks: { callback: v => v+'%', color:'#8899bb', stepSize:20 }
         }
       }
     }
@@ -1010,7 +1008,7 @@ function toggleIndex(symbol) {
 /* Allocation mode toggle */
 function setAllocMode(mode) {
   allocMode = mode;
-  document.getElementById('btn-alloc-area').classList.toggle('active', mode==='area');
+  document.getElementById('btn-alloc-area').classList.toggle('active', mode==='bar');
   document.getElementById('btn-alloc-line').classList.toggle('active', mode==='line');
   buildAllocChart(portfolioMonthly);
 }
